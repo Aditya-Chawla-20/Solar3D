@@ -1,3 +1,14 @@
+export interface MoonData {
+  id: string;
+  name: string;
+  diameter: number;
+  orbitRadius: number;
+  orbitSpeed: number;
+  rotationSpeed: number;
+  color: number;
+  description: string;
+}
+
 export interface PlanetData {
   id: string;
   name: string;
@@ -7,7 +18,7 @@ export interface PlanetData {
   distanceFromSun: number; // million km
   orbitalPeriod: number; // Earth days
   rotationPeriod: number; // Earth days
-  moons: number;
+  moons: MoonData[];
   temperature: string; // Average temperature
   atmosphere: string;
   texture: string;
@@ -29,11 +40,11 @@ export const planetData: PlanetData[] = [
     distanceFromSun: 57.9,
     orbitalPeriod: 88,
     rotationPeriod: 58.6,
-    moons: 0,
+    moons: [],
     temperature: "-173°C to 427°C",
     atmosphere: "Minimal - Sodium, Potassium, Oxygen",
     texture: "/textures/mercury.jpg",
-    color: "#A9A9A9",
+    color: "#A0522D",
     size: 0.38,
     orbitSpeed: 0.04,
     rotationSpeed: 0.0017,
@@ -54,11 +65,11 @@ export const planetData: PlanetData[] = [
     distanceFromSun: 108.2,
     orbitalPeriod: 225,
     rotationPeriod: -243, // Negative indicates retrograde rotation
-    moons: 0,
+    moons: [],
     temperature: "462°C",
     atmosphere: "Dense - Carbon Dioxide, Nitrogen, Sulfuric Acid",
     texture: "/textures/venus.jpg",
-    color: "#E6E6FA",
+    color: "#DEB887",
     size: 0.95,
     orbitSpeed: 0.015,
     rotationSpeed: -0.0004,
@@ -79,11 +90,22 @@ export const planetData: PlanetData[] = [
     distanceFromSun: 149.6,
     orbitalPeriod: 365.25,
     rotationPeriod: 1,
-    moons: 1,
+    moons: [
+      {
+        id: 'moon',
+        name: 'Moon',
+        diameter: 3474,
+        orbitRadius: 5,
+        orbitSpeed: 0.5,
+        rotationSpeed: 0.1,
+        color: 0xE6E6FA,
+        description: 'Earth\'s only natural satellite.'
+      }
+    ],
     temperature: "-88°C to 58°C",
     atmosphere: "Nitrogen, Oxygen, Argon, Carbon Dioxide",
     texture: "/textures/earth.jpg",
-    color: "#1E90FF",
+    color: "#4169E1",
     size: 1,
     orbitSpeed: 0.01,
     rotationSpeed: 0.01,
@@ -104,11 +126,32 @@ export const planetData: PlanetData[] = [
     distanceFromSun: 227.9,
     orbitalPeriod: 687,
     rotationPeriod: 1.03,
-    moons: 2,
+    moons: [
+      {
+        id: 'phobos',
+        name: 'Phobos',
+        diameter: 22.2,
+        orbitRadius: 3,
+        orbitSpeed: 1.5,
+        rotationSpeed: 0.2,
+        color: 0x8B4513,
+        description: 'The larger and inner moon of Mars.'
+      },
+      {
+        id: 'deimos',
+        name: 'Deimos',
+        diameter: 12.6,
+        orbitRadius: 4,
+        orbitSpeed: 0.8,
+        rotationSpeed: 0.1,
+        color: 0xA0522D,
+        description: 'The smaller and outer moon of Mars.'
+      }
+    ],
     temperature: "-153°C to 20°C",
     atmosphere: "Thin - Carbon Dioxide, Nitrogen, Argon",
     texture: "/textures/mars.jpg",
-    color: "#FF4500",
+    color: "#CD853F",
     size: 0.53,
     orbitSpeed: 0.008,
     rotationSpeed: 0.009,
@@ -129,11 +172,52 @@ export const planetData: PlanetData[] = [
     distanceFromSun: 778.5,
     orbitalPeriod: 4333,
     rotationPeriod: 0.41,
-    moons: 79,
+    moons: [
+      {
+        id: 'io',
+        name: 'Io',
+        diameter: 3643,
+        orbitRadius: 8,
+        orbitSpeed: 2.5,
+        rotationSpeed: 0.3,
+        color: 0xFFD700,
+        description: 'The most volcanically active body in the solar system.'
+      },
+      {
+        id: 'europa',
+        name: 'Europa',
+        diameter: 3122,
+        orbitRadius: 10,
+        orbitSpeed: 2.0,
+        rotationSpeed: 0.2,
+        color: 0xF0F8FF,
+        description: 'A moon with a subsurface ocean.'
+      },
+      {
+        id: 'ganymede',
+        name: 'Ganymede',
+        diameter: 5268,
+        orbitRadius: 12,
+        orbitSpeed: 1.5,
+        rotationSpeed: 0.2,
+        color: 0xD3D3D3,
+        description: 'The largest moon in the solar system.'
+      },
+      {
+        id: 'callisto',
+        name: 'Callisto',
+        diameter: 4821,
+        orbitRadius: 14,
+        orbitSpeed: 1.2,
+        rotationSpeed: 0.1,
+        color: 0x808080,
+        description: 'The most heavily cratered object in the solar system.'
+      }
+    ],
     temperature: "-145°C",
     atmosphere: "Hydrogen, Helium, Methane, Ammonia",
     texture: "/textures/jupiter.jpg",
-    color: "#FFA500",
+    color: "#DAA520",
     size: 11.2,
     orbitSpeed: 0.004,
     rotationSpeed: 0.024,
@@ -154,7 +238,38 @@ export const planetData: PlanetData[] = [
     distanceFromSun: 1434,
     orbitalPeriod: 10759,
     rotationPeriod: 0.44,
-    moons: 82,
+    moons: [
+      {
+        id: 'titan',
+        name: 'Titan',
+        diameter: 5149,
+        orbitRadius: 10,
+        orbitSpeed: 1.8,
+        rotationSpeed: 0.2,
+        color: 0xDEB887,
+        description: 'The only moon with a substantial atmosphere.'
+      },
+      {
+        id: 'enceladus',
+        name: 'Enceladus',
+        diameter: 504,
+        orbitRadius: 6,
+        orbitSpeed: 2.2,
+        rotationSpeed: 0.3,
+        color: 0xF5F5F5,
+        description: 'A moon with geysers of water ice.'
+      },
+      {
+        id: 'mimas',
+        name: 'Mimas',
+        diameter: 396,
+        orbitRadius: 4,
+        orbitSpeed: 2.5,
+        rotationSpeed: 0.3,
+        color: 0xD2B48C,
+        description: 'Known as the Death Star moon due to its large crater.'
+      }
+    ],
     temperature: "-178°C",
     atmosphere: "Hydrogen, Helium, Methane",
     texture: "/textures/saturn.jpg",
@@ -179,11 +294,42 @@ export const planetData: PlanetData[] = [
     distanceFromSun: 2871,
     orbitalPeriod: 30687,
     rotationPeriod: -0.72, // Negative indicates retrograde rotation
-    moons: 27,
+    moons: [
+      {
+        id: 'titania',
+        name: 'Titania',
+        diameter: 1578,
+        orbitRadius: 8,
+        orbitSpeed: 1.5,
+        rotationSpeed: 0.2,
+        color: 0xcccccc,
+        description: 'The largest moon of Uranus.'
+      },
+      {
+        id: 'oberon',
+        name: 'Oberon',
+        diameter: 1523,
+        orbitRadius: 10,
+        orbitSpeed: 1.2,
+        rotationSpeed: 0.1,
+        color: 0x999999,
+        description: 'The second-largest moon of Uranus.'
+      },
+      {
+        id: 'umbriel',
+        name: 'Umbriel',
+        diameter: 1169,
+        orbitRadius: 6,
+        orbitSpeed: 1.8,
+        rotationSpeed: 0.2,
+        color: 0x888888,
+        description: 'The darkest moon of Uranus.'
+      }
+    ],
     temperature: "-224°C",
     atmosphere: "Hydrogen, Helium, Methane",
     texture: "/textures/uranus.jpg",
-    color: "#ADD8E6",
+    color: "#87CEEB",
     size: 4,
     orbitSpeed: 0.0007,
     rotationSpeed: -0.014,
@@ -204,11 +350,42 @@ export const planetData: PlanetData[] = [
     distanceFromSun: 4495,
     orbitalPeriod: 60190,
     rotationPeriod: 0.67,
-    moons: 14,
+    moons: [
+      {
+        id: 'triton',
+        name: 'Triton',
+        diameter: 2707,
+        orbitRadius: 8,
+        orbitSpeed: 1.6,
+        rotationSpeed: 0.2,
+        color: 0xffffff,
+        description: 'The largest moon of Neptune.'
+      },
+      {
+        id: 'proteus',
+        name: 'Proteus',
+        diameter: 420,
+        orbitRadius: 6,
+        orbitSpeed: 1.9,
+        rotationSpeed: 0.3,
+        color: 0xcccccc,
+        description: 'The second-largest moon of Neptune.'
+      },
+      {
+        id: 'nereid',
+        name: 'Nereid',
+        diameter: 340,
+        orbitRadius: 12,
+        orbitSpeed: 1.0,
+        rotationSpeed: 0.1,
+        color: 0x999999,
+        description: 'A moon with a highly eccentric orbit.'
+      }
+    ],
     temperature: "-218°C",
     atmosphere: "Hydrogen, Helium, Methane",
     texture: "/textures/neptune.jpg",
-    color: "#4169E1",
+    color: "#1E90FF",
     size: 3.88,
     orbitSpeed: 0.0005,
     rotationSpeed: 0.015,
@@ -232,7 +409,7 @@ export const getSunData = () => {
     distanceFromSun: 0,
     orbitalPeriod: 0,
     rotationPeriod: 27,
-    moons: 0,
+    moons: [],
     temperature: "5,500°C (surface), 15,000,000°C (core)",
     atmosphere: "Hydrogen, Helium",
     texture: "/textures/sun.jpg",

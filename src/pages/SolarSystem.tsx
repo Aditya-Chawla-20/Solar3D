@@ -10,6 +10,14 @@ const SolarSystem: React.FC = () => {
   const [selectedPlanet, setSelectedPlanet] = useState<string | null>(null);
   const [showLabels, setShowLabels] = useState(true);
   const [orbitSpeed, setOrbitSpeed] = useState(1);
+  const [selectedPlanetInfo, setSelectedPlanetInfo] = useState<{
+    name: string;
+    description: string;
+    temperature: string;
+    atmosphere: string;
+  } | null>(null);
+  const [cameraMode, setCameraMode] = useState<'free' | 'orbit' | 'planet'>('orbit');
+  const [targetPlanet, setTargetPlanet] = useState<string | null>(null);
   const navigate = useNavigate();
   
   // Scene references
@@ -21,9 +29,17 @@ const SolarSystem: React.FC = () => {
   const labelsRef = useRef<{[key: string]: THREE.Object3D}>({});
   const animationFrameRef = useRef<number | null>(null);
   const textureLoaderRef = useRef<THREE.TextureLoader>(new THREE.TextureLoader());
+  const timeRef = useRef(0); // Add time reference for smooth animations
+  const asteroidsRef = useRef<{
+    points: THREE.Points;
+    positions: Float32Array;
+    velocities: Float32Array;
+  } | null>(null);
 
   useEffect(() => {
     if (!containerRef.current) return;
+
+    console.log('Initializing Solar System scene...');
 
     // Initialize scene
     const scene = new THREE.Scene();
@@ -35,69 +51,117 @@ const SolarSystem: React.FC = () => {
 
     // Initialize camera
     const camera = new THREE.PerspectiveCamera(
-      75,
+      60,
       window.innerWidth / window.innerHeight,
       0.1,
-      1000
+      2000
     );
     cameraRef.current = camera;
-    camera.position.set(0, 30, 80);
+    camera.position.set(0, 50, 150);
 
     // Initialize renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    const renderer = new THREE.WebGLRenderer({ 
+      antialias: true,
+      alpha: true
+    });
     rendererRef.current = renderer;
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     renderer.shadowMap.enabled = true;
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     containerRef.current.appendChild(renderer.domElement);
 
-    // Add controls
+    // Enhanced lighting setup
+    const ambientLight = new THREE.AmbientLight(0x333333, 0.3);
+    scene.add(ambientLight);
+
+    // Sun light
+    const sunLight = new THREE.PointLight(0xffffff, 2, 1000);
+    sunLight.position.set(0, 0, 0);
+    scene.add(sunLight);
+
+    // Directional lights for better shadows
+    const directionalLight1 = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight1.position.set(1, 1, 1);
+    scene.add(directionalLight1);
+
+    const directionalLight2 = new THREE.DirectionalLight(0xffffff, 0.5);
+    directionalLight2.position.set(-1, -1, -1);
+    scene.add(directionalLight2);
+
+    // Add fog for depth
+    scene.fog = new THREE.Fog(0x000000, 100, 1000);
+
+    // Enhanced camera controls
     const controls = new OrbitControls(camera, renderer.domElement);
     controlsRef.current = controls;
     controls.enableDamping = true;
     controls.dampingFactor = 0.05;
-    controls.minDistance = 5;
-    controls.maxDistance = 200;
-    controls.autoRotate = false;
+    controls.minDistance = 10;
+    controls.maxDistance = 1000;
+    controls.autoRotate = true;
     controls.autoRotateSpeed = 0.5;
+    controls.enablePan = true;
+    controls.enableZoom = true;
+    controls.enableRotate = true;
+    controls.screenSpacePanning = true;
+    controls.mouseButtons = {
+      LEFT: THREE.MOUSE.ROTATE,
+      MIDDLE: THREE.MOUSE.DOLLY,
+      RIGHT: THREE.MOUSE.PAN
+    };
+    controls.target.set(0, 0, 0);
+    controls.update();
 
-    // Add ambient light
-    const ambientLight = new THREE.AmbientLight(0x333333);
-    scene.add(ambientLight);
-
-    // Create sun
-    createSun(scene);
+    // Add camera mode controls
+    controls.addEventListener('change', () => {
+      if (cameraMode === 'planet' && targetPlanet) {
+        const planet = planetsRef.current[targetPlanet];
+        if (planet) {
+          const planetPosition = new THREE.Vector3();
+          planet.getWorldPosition(planetPosition);
+          controls.target.copy(planetPosition);
+        }
+      }
+    });
 
     // Create planets
     createPlanets(scene);
-
-    // Add orbit lines
-    addOrbitLines(scene);
-
-    // Add planet labels
+    
+    // Add planet labels if enabled
     if (showLabels) {
       addPlanetLabels(scene);
     }
 
-    // Handle window resize
-    const handleResize = () => {
-      if (!camera || !renderer) return;
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-    };
+    // Add asteroids
+    const asteroids = addAsteroids(scene);
+    asteroidsRef.current = asteroids;
 
-    window.addEventListener('resize', handleResize);
-    
-    // Animation loop
-    const animate = () => {
+    // Start animation loop with better timing
+    let lastTime = 0;
+    const animate = (currentTime: number) => {
       animationFrameRef.current = requestAnimationFrame(animate);
+      
+      // Calculate delta time for smooth animations
+      const deltaTime = (currentTime - lastTime) / 1000;
+      lastTime = currentTime;
+      
+      // Update time reference
+      timeRef.current += deltaTime;
       
       // Rotate planets
       rotatePlanets();
       
-      // Update controls
+      // Update asteroids
+      if (asteroidsRef.current) {
+        updateAsteroids(
+          asteroidsRef.current.points,
+          asteroidsRef.current.positions,
+          asteroidsRef.current.velocities
+        );
+      }
+      
+      // Update controls with smooth damping
       if (controlsRef.current) {
         controlsRef.current.update();
       }
@@ -113,8 +177,19 @@ const SolarSystem: React.FC = () => {
       }
     };
     
-    animate();
+    animate(0);
     setLoading(false);
+    console.log('Scene initialization complete');
+
+    // Handle window resize
+    const handleResize = () => {
+      if (!camera || !renderer) return;
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    };
+
+    window.addEventListener('resize', handleResize);
 
     // Cleanup
     return () => {
@@ -143,22 +218,6 @@ const SolarSystem: React.FC = () => {
     };
   }, []);
 
-  // Update when showLabels changes
-  useEffect(() => {
-    if (!sceneRef.current) return;
-    
-    // Remove all existing labels
-    Object.values(labelsRef.current).forEach(label => {
-      sceneRef.current?.remove(label);
-    });
-    labelsRef.current = {};
-    
-    // Add labels if enabled
-    if (showLabels) {
-      addPlanetLabels(sceneRef.current);
-    }
-  }, [showLabels]);
-
   // Add stars to the scene
   const addStars = (scene: THREE.Scene) => {
     // Create small stars (points)
@@ -179,178 +238,155 @@ const SolarSystem: React.FC = () => {
     starGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starVertices, 3));
     const stars = new THREE.Points(starGeometry, starMaterial);
     scene.add(stars);
-    
-    // Add some larger, glowing stars
-    const largeStarGeometry = new THREE.SphereGeometry(0.25, 8, 8);
-    const largeStarMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff });
-    
-    for (let i = 0; i < 50; i++) {
-      const star = new THREE.Mesh(largeStarGeometry, largeStarMaterial);
-      const x = (Math.random() - 0.5) * 500;
-      const y = (Math.random() - 0.5) * 500;
-      const z = (Math.random() - 0.5) * 500;
-      
-      star.position.set(x, y, z);
-      scene.add(star);
-    }
   };
 
-  // Create the sun
-  const createSun = (scene: THREE.Scene) => {
-    const sunData = getSunData();
-    
-    // Try to load sun texture, fall back to basic material if not available
-    const sunGeometry = new THREE.SphereGeometry(5, 32, 32);
-    let sunMaterial: THREE.Material;
-    
-    try {
-      // Create a glowing sun material
-      const sunTexture = textureLoaderRef.current.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/sun.jpg');
-      sunMaterial = new THREE.MeshBasicMaterial({
-        map: sunTexture,
-        color: sunData.color,
-      });
-    } catch (error) {
-      console.warn('Failed to load sun texture, using fallback', error);
-      sunMaterial = new THREE.MeshBasicMaterial({
-        color: sunData.color,
-        emissive: sunData.color,
-        emissiveIntensity: 1,
-      });
-    }
-    
+  // Create all planets
+  const createPlanets = (scene: THREE.Scene) => {
+    // Create sun with realistic glow
+    const sunGeometry = new THREE.SphereGeometry(5, 64, 64);
+    const sunMaterial = new THREE.MeshStandardMaterial({
+      color: 0xffff00,
+      emissive: 0xffff00,
+      emissiveIntensity: 2,
+      toneMapped: false
+    });
     const sun = new THREE.Mesh(sunGeometry, sunMaterial);
     sun.name = 'sun';
     scene.add(sun);
     planetsRef.current['sun'] = sun;
 
-    // Add point light at sun's position
-    const sunLight = new THREE.PointLight(0xffffff, 1.5, 1000);
-    sun.add(sunLight);
-    
-    // Add a glow effect
-    const sunGlowGeometry = new THREE.SphereGeometry(5.5, 32, 32);
-    const sunGlowMaterial = new THREE.MeshBasicMaterial({
-      color: 0xffff00,
-      transparent: true,
-      opacity: 0.3,
+    // Add sun glow effect
+    const sunGlowGeometry = new THREE.SphereGeometry(5.2, 64, 64);
+    const sunGlowMaterial = new THREE.ShaderMaterial({
+      uniforms: {
+        c: { value: 1.0 },
+        p: { value: 3.0 },
+        glowColor: { value: new THREE.Color(0xffff00) },
+        viewVector: { value: cameraRef.current?.position || new THREE.Vector3() }
+      },
+      vertexShader: `
+        uniform vec3 viewVector;
+        varying float intensity;
+        void main() {
+          vec3 vNormal = normalize(normalMatrix * normal);
+          vec3 vNormel = normalize(normalMatrix * viewVector);
+          intensity = pow( dot(vNormal, vNormel), 6.0 );
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 glowColor;
+        varying float intensity;
+        void main() {
+          vec3 glow = glowColor * intensity;
+          gl_FragColor = vec4(glow, 1.0);
+        }
+      `,
+      side: THREE.BackSide,
+      blending: THREE.AdditiveBlending,
+      transparent: true
     });
     const sunGlow = new THREE.Mesh(sunGlowGeometry, sunGlowMaterial);
     sun.add(sunGlow);
-  };
 
-  // Create all planets
-  const createPlanets = (scene: THREE.Scene) => {
+    // Add point light at sun's position
+    const sunLight = new THREE.PointLight(0xffffff, 2, 1000);
+    sun.add(sunLight);
+
+    // Create planets with realistic materials
     planetData.forEach(planet => {
-      // Create planet geometry
-      const planetSize = planet.size * 0.4; // Scale down for better visualization
-      const planetGeometry = new THREE.SphereGeometry(planetSize, 32, 32);
+      // Create planet geometry with more segments for better detail
+      const planetSize = planet.size * 0.4;
+      const planetGeometry = new THREE.SphereGeometry(planetSize, 64, 64);
       
-      // Try to load planet texture, fall back to basic material if not available
-      let planetMaterial: THREE.Material;
-      
-      try {
-        // Use placeholder URLs for textures
-        const textureUrl = getTextureUrl(planet.id);
-        if (textureUrl) {
-          const texture = textureLoaderRef.current.load(textureUrl);
-          planetMaterial = new THREE.MeshStandardMaterial({
-            map: texture,
-            roughness: 0.7,
-            metalness: 0.1
-          });
-        } else {
-          throw new Error('No texture URL available');
-        }
-      } catch (error) {
-        console.warn(`Failed to load texture for ${planet.name}, using fallback`, error);
-        planetMaterial = new THREE.MeshStandardMaterial({
-          color: planet.color,
-          roughness: 0.7,
-          metalness: 0.1
-        });
-      }
+      // Create planet material with PBR properties
+      const planetMaterial = new THREE.MeshStandardMaterial({
+        color: planet.color,
+        metalness: 0.1,
+        roughness: 0.8,
+        envMapIntensity: 1.0,
+        emissive: planet.color,
+        emissiveIntensity: 0.1
+      });
       
       // Create planet mesh
       const planetMesh = new THREE.Mesh(planetGeometry, planetMaterial);
       planetMesh.name = planet.id;
-      planetMesh.castShadow = true;
-      planetMesh.receiveShadow = true;
       
-      // Position planet
+      // Position planet with random initial angle
       const angle = Math.random() * Math.PI * 2;
       planetMesh.position.x = Math.cos(angle) * planet.orbitRadius;
       planetMesh.position.z = Math.sin(angle) * planet.orbitRadius;
       
-      // Create planet pivot for orbit
-      const planetPivot = new THREE.Object3D();
-      planetPivot.name = `${planet.id}-pivot`;
-      planetPivot.add(planetMesh);
-      scene.add(planetPivot);
-      
-      // Store reference to planet
+      // Add planet to scene
+      scene.add(planetMesh);
       planetsRef.current[planet.id] = planetMesh;
-      planetsRef.current[`${planet.id}-pivot`] = planetPivot;
-      
-      // Add rings for Saturn
-      if (planet.id === 'saturn') {
-        addSaturnRings(planetMesh, planetSize);
-      }
-    });
-  };
 
-  // Add rings for Saturn
-  const addSaturnRings = (saturnMesh: THREE.Object3D, planetSize: number) => {
-    const innerRadius = planetSize * 1.2;
-    const outerRadius = planetSize * 2;
-    const ringGeometry = new THREE.RingGeometry(innerRadius, outerRadius, 64);
-    
-    // Rotate the ring geometry to be horizontal
-    const positionAttribute = ringGeometry.getAttribute('position');
-    const vertex = new THREE.Vector3();
-    
-    for (let i = 0; i < positionAttribute.count; i++) {
-      vertex.fromBufferAttribute(positionAttribute, i);
-      vertex.z = vertex.y;
-      vertex.y = 0;
-      positionAttribute.setXYZ(i, vertex.x, vertex.y, vertex.z);
-    }
-    
-    const ringMaterial = new THREE.MeshBasicMaterial({
-      color: 0xf8e8c0,
-      side: THREE.DoubleSide,
-      transparent: true,
-      opacity: 0.8,
-    });
-    
-    const ring = new THREE.Mesh(ringGeometry, ringMaterial);
-    ring.rotation.x = Math.PI / 4; // Tilt the rings
-    saturnMesh.add(ring);
-  };
-
-  // Add orbit lines
-  const addOrbitLines = (scene: THREE.Scene) => {
-    planetData.forEach(planet => {
-      const orbitGeometry = new THREE.BufferGeometry();
-      const orbitMaterial = new THREE.LineBasicMaterial({ 
-        color: 0x444444,
-        transparent: true,
-        opacity: 0.3
+      // Create moons with realistic materials
+      planet.moons.forEach(moon => {
+        const moonSize = moon.diameter / 10000;
+        const moonGeometry = new THREE.SphereGeometry(moonSize, 32, 32);
+        
+        const moonMaterial = new THREE.MeshStandardMaterial({
+          color: moon.color,
+          metalness: 0.1,
+          roughness: 0.8,
+          envMapIntensity: 1.0,
+          emissive: moon.color,
+          emissiveIntensity: 0.05
+        });
+        
+        const moonMesh = new THREE.Mesh(moonGeometry, moonMaterial);
+        moonMesh.name = `${planet.id}_${moon.id}`;
+        
+        // Position moon relative to its planet
+        const moonAngle = Math.random() * Math.PI * 2;
+        moonMesh.position.x = Math.cos(moonAngle) * moon.orbitRadius;
+        moonMesh.position.z = Math.sin(moonAngle) * moon.orbitRadius;
+        
+        planetMesh.add(moonMesh);
+        planetsRef.current[`${planet.id}_${moon.id}`] = moonMesh;
       });
-      
-      const orbitPoints = [];
-      const segments = 128;
-      
-      for (let i = 0; i <= segments; i++) {
-        const angle = (i / segments) * Math.PI * 2;
-        const x = Math.cos(angle) * planet.orbitRadius;
-        const z = Math.sin(angle) * planet.orbitRadius;
-        orbitPoints.push(x, 0, z);
+
+      // Add orbit line with better visibility
+      const orbitGeometry = new THREE.RingGeometry(
+        planet.orbitRadius - 0.1,
+        planet.orbitRadius + 0.1,
+        256
+      );
+      const orbitMaterial = new THREE.MeshStandardMaterial({
+        color: 0x666666,
+        transparent: true,
+        opacity: 0.2,
+        side: THREE.DoubleSide,
+        metalness: 0.1,
+        roughness: 0.8
+      });
+      const orbitLine = new THREE.Mesh(orbitGeometry, orbitMaterial);
+      orbitLine.rotation.x = Math.PI / 2;
+      scene.add(orbitLine);
+
+      // Add rings for Saturn with realistic appearance
+      if (planet.id === 'saturn') {
+        const ringGeometry = new THREE.RingGeometry(
+          planetSize * 1.2,
+          planetSize * 2,
+          128
+        );
+        const ringMaterial = new THREE.MeshStandardMaterial({
+          color: 0xf8e8c0,
+          transparent: true,
+          opacity: 0.8,
+          side: THREE.DoubleSide,
+          metalness: 0.3,
+          roughness: 0.7,
+          emissive: 0xf8e8c0,
+          emissiveIntensity: 0.1
+        });
+        const ring = new THREE.Mesh(ringGeometry, ringMaterial);
+        ring.rotation.x = Math.PI / 4;
+        planetMesh.add(ring);
       }
-      
-      orbitGeometry.setAttribute('position', new THREE.Float32BufferAttribute(orbitPoints, 3));
-      const orbit = new THREE.Line(orbitGeometry, orbitMaterial);
-      scene.add(orbit);
     });
   };
 
@@ -450,9 +486,6 @@ const SolarSystem: React.FC = () => {
         
         // Make label face the camera
         if (cameraRef.current) {
-          const labelDirection = new THREE.Vector3();
-          label.getWorldPosition(labelDirection);
-          labelDirection.sub(cameraRef.current.position);
           label.lookAt(cameraRef.current.position);
         }
       }
@@ -464,40 +497,44 @@ const SolarSystem: React.FC = () => {
     return planetData.find(planet => planet.id === id);
   };
 
-  // Helper to get texture URL based on planet ID
-  const getTextureUrl = (planetId: string): string => {
-    const textureMap: {[key: string]: string} = {
-      'mercury': 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/mercury.jpg',
-      'venus': 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/venus.jpg',
-      'earth': 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth.jpg',
-      'mars': 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/mars.jpg',
-      'jupiter': 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/jupiter.jpg',
-      'saturn': 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/saturn.jpg',
-      'uranus': 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/uranus.jpg',
-      'neptune': 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/neptune.jpg'
-    };
-    
-    return textureMap[planetId] || '';
-  };
-
   // Rotate planets
   const rotatePlanets = () => {
-    // Rotate sun
+    timeRef.current += 0.016;
+
+    // Rotate sun with smooth motion
     if (planetsRef.current['sun']) {
-      planetsRef.current['sun'].rotation.y += getSunData().rotationSpeed * 0.01;
+      planetsRef.current['sun'].rotation.y = timeRef.current * getSunData().rotationSpeed * 0.01;
     }
     
-    // Rotate and orbit planets
+    // Rotate and orbit planets with smooth motion
     planetData.forEach(planet => {
       const planetMesh = planetsRef.current[planet.id];
-      const planetPivot = planetsRef.current[`${planet.id}-pivot`];
       
-      if (planetMesh && planetPivot) {
-        // Rotate planet around its axis
-        planetMesh.rotation.y += planet.rotationSpeed * 0.01;
+      if (planetMesh) {
+        // Smooth rotation around axis
+        planetMesh.rotation.y = timeRef.current * planet.rotationSpeed * 0.01;
         
-        // Orbit planet around the sun
-        planetPivot.rotation.y += planet.orbitSpeed * 0.01 * orbitSpeed;
+        // Smooth orbital motion
+        const orbitAngle = timeRef.current * planet.orbitSpeed * 0.01 * orbitSpeed;
+        planetMesh.position.x = Math.cos(orbitAngle) * planet.orbitRadius;
+        planetMesh.position.z = Math.sin(orbitAngle) * planet.orbitRadius;
+        
+        // Add slight wobble to make it more natural
+        planetMesh.position.y = Math.sin(timeRef.current * 0.5) * 0.1;
+
+        // Animate moons
+        planet.moons.forEach(moon => {
+          const moonMesh = planetsRef.current[`${planet.id}_${moon.id}`];
+          if (moonMesh) {
+            // Moon rotation
+            moonMesh.rotation.y = timeRef.current * moon.rotationSpeed * 0.01;
+            
+            // Moon orbit around planet
+            const moonOrbitAngle = timeRef.current * moon.orbitSpeed * 0.01 * orbitSpeed;
+            moonMesh.position.x = Math.cos(moonOrbitAngle) * moon.orbitRadius;
+            moonMesh.position.z = Math.sin(moonOrbitAngle) * moon.orbitRadius;
+          }
+        });
       }
     });
   };
@@ -533,6 +570,15 @@ const SolarSystem: React.FC = () => {
               // Check if it's a valid planet or the sun
               if (planetId === 'sun' || planetData.some(p => p.id === planetId)) {
                 setSelectedPlanet(planetId);
+                const planetInfo = planetId === 'sun' ? getSunData() : planetData.find(p => p.id === planetId);
+                if (planetInfo) {
+                  setSelectedPlanetInfo({
+                    name: planetInfo.name,
+                    description: planetInfo.description,
+                    temperature: planetInfo.temperature,
+                    atmosphere: planetInfo.atmosphere
+                  });
+                }
                 navigate(`/planet/${planetId}`);
                 break;
               }
@@ -559,11 +605,11 @@ const SolarSystem: React.FC = () => {
           break;
         case '+':
         case '=':
-          setOrbitSpeed(prev => Math.min(prev + 0.5, 5));
+          setOrbitSpeed(prev => Math.min(prev + 0.1, 5));
           break;
         case '-':
         case '_':
-          setOrbitSpeed(prev => Math.max(prev - 0.5, 0.1));
+          setOrbitSpeed(prev => Math.max(prev - 0.1, 0.1));
           break;
         case 'r':
         case 'R':
@@ -573,8 +619,9 @@ const SolarSystem: React.FC = () => {
           break;
         case 'Home':
           if (controlsRef.current && cameraRef.current) {
-            cameraRef.current.position.set(0, 30, 80);
+            cameraRef.current.position.set(0, 50, 150);
             controlsRef.current.target.set(0, 0, 0);
+            controlsRef.current.update();
           }
           break;
       }
@@ -587,6 +634,82 @@ const SolarSystem: React.FC = () => {
     };
   }, []);
 
+  // Add asteroids
+  const addAsteroids = (scene: THREE.Scene) => {
+    const asteroidCount = 1000;
+    const asteroidGeometry = new THREE.BufferGeometry();
+    const asteroidMaterial = new THREE.PointsMaterial({
+      color: 0x888888,
+      size: 0.05,
+      transparent: true,
+      opacity: 0.8
+    });
+
+    const asteroidPositions = new Float32Array(asteroidCount * 3);
+    const asteroidVelocities = new Float32Array(asteroidCount * 3);
+
+    for (let i = 0; i < asteroidCount; i++) {
+      const radius = 100 + Math.random() * 400;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI * 2;
+
+      asteroidPositions[i * 3] = radius * Math.sin(theta) * Math.cos(phi);
+      asteroidPositions[i * 3 + 1] = radius * Math.sin(theta) * Math.sin(phi);
+      asteroidPositions[i * 3 + 2] = radius * Math.cos(theta);
+
+      asteroidVelocities[i * 3] = (Math.random() - 0.5) * 0.1;
+      asteroidVelocities[i * 3 + 1] = (Math.random() - 0.5) * 0.1;
+      asteroidVelocities[i * 3 + 2] = (Math.random() - 0.5) * 0.1;
+    }
+
+    asteroidGeometry.setAttribute('position', new THREE.BufferAttribute(asteroidPositions, 3));
+    const asteroids = new THREE.Points(asteroidGeometry, asteroidMaterial);
+    scene.add(asteroids);
+    return { points: asteroids, positions: asteroidPositions, velocities: asteroidVelocities };
+  };
+
+  // Update asteroid positions
+  const updateAsteroids = (asteroids: THREE.Points, positions: Float32Array, velocities: Float32Array) => {
+    const asteroidPositions = asteroids.geometry.attributes.position.array as Float32Array;
+    for (let i = 0; i < asteroidPositions.length; i += 3) {
+      asteroidPositions[i] += velocities[i];
+      asteroidPositions[i + 1] += velocities[i + 1];
+      asteroidPositions[i + 2] += velocities[i + 2];
+
+      // Wrap asteroids around the scene bounds
+      const maxDistance = 500;
+      if (Math.abs(asteroidPositions[i]) > maxDistance) asteroidPositions[i] *= -0.9;
+      if (Math.abs(asteroidPositions[i + 1]) > maxDistance) asteroidPositions[i + 1] *= -0.9;
+      if (Math.abs(asteroidPositions[i + 2]) > maxDistance) asteroidPositions[i + 2] *= -0.9;
+    }
+    asteroids.geometry.attributes.position.needsUpdate = true;
+  };
+
+  // Add camera mode change handler
+  const handleCameraModeChange = (mode: 'free' | 'orbit' | 'planet') => {
+    setCameraMode(mode);
+    if (controlsRef.current) {
+      controlsRef.current.autoRotate = mode === 'orbit';
+      controlsRef.current.enablePan = mode === 'free';
+      controlsRef.current.enableZoom = true;
+      controlsRef.current.enableRotate = true;
+      
+      if (mode === 'free') {
+        controlsRef.current.target.set(0, 0, 0);
+        if (cameraRef.current) {
+          cameraRef.current.position.set(0, 50, 150);
+        }
+      } else if (mode === 'planet' && targetPlanet) {
+        const planet = planetsRef.current[targetPlanet];
+        if (planet) {
+          const planetPosition = new THREE.Vector3();
+          planet.getWorldPosition(planetPosition);
+          controlsRef.current.target.copy(planetPosition);
+        }
+      }
+    }
+  };
+
   return (
     <div className="relative w-full h-screen">
       {loading && (
@@ -594,6 +717,46 @@ const SolarSystem: React.FC = () => {
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-yellow-400"></div>
         </div>
       )}
+      
+      {/* Planet Info Display */}
+      {selectedPlanetInfo && (
+        <div className="absolute bottom-4 left-4 z-10 bg-gray-800 bg-opacity-70 p-4 rounded-lg max-w-md">
+          <h3 className="text-xl font-bold text-white mb-2">{selectedPlanetInfo.name}</h3>
+          <p className="text-gray-300 text-sm mb-2">{selectedPlanetInfo.description}</p>
+          <div className="text-gray-300 text-sm space-y-1">
+            <p>Temperature: {selectedPlanetInfo.temperature}</p>
+            <p>Atmosphere: {selectedPlanetInfo.atmosphere}</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Camera controls */}
+      <div className="absolute top-4 right-4 z-10 bg-gray-800 bg-opacity-70 p-4 rounded-lg">
+        <h3 className="text-white font-bold mb-2">Camera Mode</h3>
+        <div className="space-y-2">
+          <button
+            onClick={() => handleCameraModeChange('orbit')}
+            className={`w-full px-3 py-1 rounded ${
+              cameraMode === 'orbit' ? 'bg-yellow-500' : 'bg-gray-700'
+            } text-white`}
+          >
+            Orbit Mode
+          </button>
+          <button
+            onClick={() => handleCameraModeChange('free')}
+            className={`w-full px-3 py-1 rounded ${
+              cameraMode === 'free' ? 'bg-yellow-500' : 'bg-gray-700'
+            } text-white`}
+          >
+            Free Mode
+          </button>
+        </div>
+        <div className="mt-2 text-sm text-gray-300">
+          <p>• Orbit: Rotate around target</p>
+          <p>• Free: Move anywhere in space</p>
+        </div>
+      </div>
+
       <div className="absolute top-4 left-4 z-10 bg-gray-800 bg-opacity-70 p-4 rounded-lg max-w-xs">
         <h2 className="text-xl font-bold text-white mb-2">Solar System Explorer</h2>
         <p className="text-gray-300 text-sm mb-2">Click on a planet to learn more about it.</p>
@@ -603,6 +766,7 @@ const SolarSystem: React.FC = () => {
           <p>• +/-: Adjust orbit speed</p>
           <p>• R: Toggle auto-rotation</p>
           <p>• Home: Reset camera</p>
+          <p>• Right-click + drag: Pan in free mode</p>
         </div>
         <div className="mt-4">
           <div className="flex items-center justify-between">
